@@ -1,0 +1,534 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Virtual Art Gallery — React Demo</title>
+  <style>
+    :root{--bg:#071025;--panel:#0b1626;--muted:#94a3b8;--accent:#7c3aed}
+    *{box-sizing:border-box}
+    body{margin:0;background:linear-gradient(180deg,var(--bg),#081826);font-family:Inter,system-ui,Segoe UI,Roboto,Arial;color:#e6eef8}
+    .container{max-width:1100px;margin:28px auto;padding:20px}
+    header{display:flex;align-items:center;justify-content:space-between}
+    .logo{display:flex;align-items:center;gap:12px}
+    .mark{width:46px;height:46px;border-radius:8px;background:linear-gradient(135deg,var(--accent),#06b6d4);display:flex;align-items:center;justify-content:center;font-weight:700}
+    .meta{color:var(--muted);font-size:13px}
+    .card{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));border-radius:12px;padding:18px;box-shadow:0 6px 18px rgba(2,6,23,0.6)}
+    .login-wrap{max-width:520px;margin:40px auto}
+    input,select,button,textarea{font-family:inherit}
+    input[type=text],input[type=password],select,textarea{width:100%;padding:12px;border-radius:8px;border:none;background:rgba(255,255,255,0.03);color:inherit}
+    button{cursor:pointer}
+    .primary{background:var(--accent);border:none;padding:10px;border-radius:10px;color:white;font-weight:600}
+    .ghost{background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--muted);padding:8px;border-radius:8px}
+    .controls{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:12px}
+    .gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px}
+    .item{background:var(--panel);border-radius:12px;overflow:hidden;display:flex;flex-direction:column}
+    .thumb{height:170px;background-size:cover;background-position:center}
+    .info{padding:12px;display:flex;flex-direction:column;gap:8px}
+    .title{font-weight:600}
+    .artist{font-size:13px;color:var(--muted)}
+    .price{margin-top:auto;font-weight:700}
+    .actions{display:flex;gap:8px;margin-top:8px}
+    .modal-back{position:fixed;inset:0;background:rgba(2,6,23,0.6);display:none;align-items:center;justify-content:center;padding:20px}
+    .modal{background:#061226;border-radius:12px;max-width:760px;width:100%;Padding:16px}
+    .checkout{display:grid;grid-template-columns:1fr 320px;gap:16px}
+    .cart-list{max-height:60vh;overflow:auto}
+    footer{margin-top:22px;color:var(--muted);font-size:13px;text-align:center}
+    @media (max-width:840px){.checkout{grid-template-columns:1fr}}
+    .row{display:flex;gap:10px;align-items:center}
+    .mini{font-size:12px;color:var(--muted)}
+    .badge{background:#0e2a3b;padding:6px 8px;border-radius:8px;font-weight:600}
+    .form-row{display:flex;gap:8px}
+    .small{padding:6px 8px;border-radius:8px}
+    .captcha-row{display:flex;gap:8px;align-items:center}
+    .captcha-input{width:160px}
+    .captcha-canvas{border-radius:6px;background:#0b1626;display:block}
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    const DEMO_USERS = [
+      {username:'admin', password:'admin123', role:'admin', name:'Gallery Admin'},
+      {username:'artist1', password:'artist123', role:'artist', name:'A. Kapoor'},
+      {username:'customer', password:'cust123', role:'customer', name:'Guest Buyer'},
+      {username:'curator', password:'cur123', role:'curator', name:'Curator'}
+    ];
+
+    const DEFAULT_ARTWORKS = [
+      {id:1,title:'Chromatic Dream',artist:'A. Kapoor',artistUser:'artist1',price:5600,year:2025,desc:'Vibrant abstract exploring color & motion.',img:'https://picsum.photos/seed/a1/800/600',approved:true,featured:false},
+      {id:2,title:'Quiet Harbor',artist:'M. Fernandez',artistUser:'artist2',price:7800,year:2024,desc:'Oil on canvas — a tranquil coastal scene.',img:'https://picsum.photos/seed/a2/800/600',approved:true,featured:false},
+      {id:3,title:'Neon Cityscape',artist:'L. Wang',artistUser:'artist3',price:4200,year:2025,desc:'Digital print inspired by night-time urban life.',img:'https://picsum.photos/seed/a3/800/600',approved:false,featured:false},
+      {id:4,title:'Fractured Light',artist:'O. Almeida',artistUser:'artist4',price:12500,year:2023,desc:'Mixed media — sculpted planes of light.',img:'https://picsum.photos/seed/a4/800/600',approved:true,featured:true},
+      {id:5,title:'Monochrome Study',artist:'N. Rao',artistUser:'artist5',price:3400,year:2022,desc:'Minimalist study of form and shadow.',img:'https://picsum.photos/seed/a5/800/600',approved:true,featured:false},
+      {id:6,title:'Botanical Echoes',artist:'S. Mehta',artistUser:'artist6',price:4900,year:2025,desc:'Watercolor series of native plants.',img:'https://picsum.photos/seed/a6/800/600',approved:false,featured:false}
+    ];
+
+    function useLocalState(key, initial){
+      const [state, setState] = useState(()=> {
+        try{ const v = localStorage.getItem(key); return v ? JSON.parse(v) : initial } catch(e){ return initial }
+      });
+      useEffect(()=> { try{ localStorage.setItem(key, JSON.stringify(state)); } catch(e){} }, [key, state]);
+      return [state, setState];
+    }
+
+    function isNumericOnly(str){
+      return /^\d+$/.test(String(str).trim());
+    }
+
+    /* ---------- CAPTCHA COMPONENT ----------
+       - draws letter-only code on canvas with some noise
+       - exposes `onCodeChange(code)` when the code refreshes
+    ---------------------------------------- */
+    function LetterCaptcha({ length = 5, onCodeChange }) {
+      const canvasRef = useRef(null);
+      const [code, setCode] = useState('');
+      const [seed, setSeed] = useState(0);
+
+      useEffect(() => {
+        // generate code of uppercase letters only
+        const letters = 'ABCDEFGHJKMNPQRSTUVWXYZ'; // omit similar looking I/L/O
+        let s = '';
+        for (let i = 0; i < length; i++) s += letters.charAt(Math.floor(Math.random() * letters.length));
+        setCode(s);
+        if (typeof onCodeChange === 'function') onCodeChange(s);
+        // cause redraw
+        setSeed(prev => prev + 1);
+      }, [length]);
+
+      useEffect(() => {
+        draw();
+        // eslint-disable-next-line
+      }, [code, seed]);
+
+      function refresh() {
+        const letters = 'ABCDEFGHJKMNPQRSTUVWXYZ';
+        let s = '';
+        for (let i = 0; i < length; i++) s += letters.charAt(Math.floor(Math.random() * letters.length));
+        setCode(s);
+        if (typeof onCodeChange === 'function') onCodeChange(s);
+        setSeed(prev => prev + 1);
+      }
+
+      function draw() {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        const w = 160, h = 48;
+        canvas.width = w;
+        canvas.height = h;
+        // background
+        ctx.fillStyle = '#071226';
+        ctx.fillRect(0,0,w,h);
+
+        // noise lines
+        for (let i = 0; i < 6; i++) {
+          ctx.beginPath();
+          ctx.moveTo(Math.random() * w, Math.random() * h);
+          ctx.lineTo(Math.random() * w, Math.random() * h);
+          ctx.strokeStyle = `rgba(${Math.floor(50+Math.random()*100)}, ${Math.floor(50+Math.random()*100)}, ${Math.floor(50+Math.random()*100)}, 0.12)`;
+          ctx.lineWidth = 1 + Math.random()*1.5;
+          ctx.stroke();
+        }
+
+        // draw letters with slight rotation each
+        const cx = w / (code.length + 1);
+        for (let i = 0; i < code.length; i++) {
+          const ch = code.charAt(i);
+          const fontSize = 28 + Math.floor(Math.random()*6);
+          ctx.save();
+          const x = (i + 0.6) * cx + (Math.random()*4 - 2);
+          const y = h/2 + (Math.random()*6 - 3);
+          const angle = (Math.random()*20 - 10) * Math.PI/180;
+          ctx.translate(x, y);
+          ctx.rotate(angle);
+          ctx.font = `${fontSize}px "Segoe UI", Roboto, Arial`;
+          ctx.fillStyle = `rgba(${200 + Math.floor(Math.random()*55)}, ${200 + Math.floor(Math.random()*55)}, ${200 + Math.floor(Math.random()*55)}, 1)`;
+          ctx.fillText(ch, -fontSize/2, fontSize/3);
+          ctx.restore();
+        }
+
+        // scatter dots
+        for (let i=0;i<30;i++){
+          ctx.fillStyle = `rgba(255,255,255,${Math.random()*0.06})`;
+          ctx.beginPath();
+          ctx.arc(Math.random()*w, Math.random()*h, Math.random()*1.6,0,Math.PI*2);
+          ctx.fill();
+        }
+      }
+
+      return (
+        <div style={{display:'flex',gap:8,alignItems:'center'}} className="captcha-row">
+          <canvas className="captcha-canvas" ref={canvasRef} width={160} height={48} aria-label="captcha image" />
+          <div style={{display:'flex',flexDirection:'column',gap:6}}>
+            <button className="ghost small" onClick={refresh} type="button">Refresh</button>
+            <div className="mini" style={{textAlign:'center'}}>Enter letters</div>
+          </div>
+        </div>
+      );
+    }
+
+    /* ---------- MAIN APP ---------- */
+    function App(){
+      const [user, setUser] = useLocalState('va_user', null);
+      const [cart, setCart] = useLocalState('va_cart', []);
+      const [artworks, setArtworks] = useLocalState('va_artworks', DEFAULT_ARTWORKS);
+      const [query, setQuery] = useState('');
+      const [sort, setSort] = useState('new');
+      const [selected, setSelected] = useState(null);
+      const [showCart, setShowCart] = useState(false);
+      const [showManageModal, setShowManageModal] = useState(false);
+      const [editing, setEditing] = useState(null);
+      const [filterByApproval, setFilterByApproval] = useState('all');
+
+      // captcha states for login
+      const [captchaCode, setCaptchaCode] = useState('');
+      const [captchaInput, setCaptchaInput] = useState('');
+
+      function loginWith(username, password){
+        if(!username || isNumericOnly(username)){
+          alert('Invalid username — it cannot be empty or only numbers');
+          return;
+        }
+        // CAPTCHA check
+        if(!captchaInput || captchaInput.trim().toLowerCase() !== String(captchaCode).trim().toLowerCase()){
+          alert('Invalid CAPTCHA — please type the letters shown');
+          return;
+        }
+        const found = DEMO_USERS.find(u => u.username === username && u.password === password);
+        if(found){ setUser({username:found.username, role:found.role, name:found.name}); alert('Signed in as ' + found.role); return }
+        alert('Invalid demo credentials. Use demo users (see login helper).');
+      }
+
+      function quickLogin(role){
+        const pick = DEMO_USERS.find(u => u.role === role);
+        if(pick){ setUser({username:pick.username,role:pick.role,name:pick.name}); }
+      }
+
+      function logout(){ setUser(null); }
+
+      function addToCart(art){
+        if(!user || user.role === 'customer' || user.role === 'admin' || user.role === 'curator' || user.role === 'artist'){
+          setCart(prev=>{
+            const found = prev.find(p=>p.id===art.id);
+            if(found) return prev.map(p=> p.id===art.id? {...p,qty:p.qty+1}: p);
+            return [...prev,{id:art.id,title:art.title,price:art.price,qty:1}]
+          });
+          alert(art.title + ' added to cart');
+        } else {
+          alert('Please sign in to purchase');
+        }
+      }
+
+      function inc(id){ setCart(prev=> prev.map(p=> p.id===id? {...p,qty:p.qty+1}:p)); }
+      function dec(id){ setCart(prev=> prev.map(p=> p.id===id? {...p,qty: Math.max(1,p.qty-1)}:p)); }
+      function removeItem(id){ setCart(prev=> prev.filter(p=>p.id!==id)); }
+
+      function placeOrder(){
+        if(cart.length===0){ alert('Cart empty'); return }
+        const name = user?.name || 'Guest';
+        const order = {id:Date.now(), customer:name, items:cart, created:new Date().toISOString()};
+        setCart([]);
+        setShowCart(false);
+        alert('Order placed (demo). id: '+order.id);
+      }
+
+      function filtered(){
+        const q = query.trim().toLowerCase();
+        let list = artworks.filter(a => {
+          const matchText = a.title.toLowerCase().includes(q) || a.artist.toLowerCase().includes(q);
+          const approvalFilter = filterByApproval === 'all' ? true : (filterByApproval === 'approved' ? a.approved : !a.approved);
+          if(user && user.role === 'artist') return matchText && (a.artistUser === user.username);
+          if(user && (user.role === 'admin' || user.role === 'curator')) return matchText && approvalFilter;
+          return matchText && a.approved;
+        });
+        if(sort==='price-asc') list = list.slice().sort((a,b)=>a.price-b.price);
+        if(sort==='price-desc') list = list.slice().sort((a,b)=>b.price-a.price);
+        if(sort==='new') list = list.slice().sort((a,b)=>b.year-b.year);
+        return list;
+      }
+
+      function saveArtwork(obj){
+        if(obj.id){
+          setArtworks(prev => prev.map(a => a.id===obj.id ? {...a, ...obj} : a));
+        } else {
+          const id = Date.now();
+          setArtworks(prev => [{...obj, id}, ...prev]);
+        }
+      }
+
+      function deleteArtwork(id){
+        if(!confirm('Delete this artwork?')) return;
+        setArtworks(prev => prev.filter(a => a.id !== id));
+      }
+
+      function toggleApproval(id){
+        setArtworks(prev => prev.map(a => a.id===id ? {...a, approved: !a.approved} : a));
+      }
+
+      function toggleFeatured(id){
+        setArtworks(prev => prev.map(a => a.id===id ? {...a, featured: !a.featured} : a));
+      }
+
+      return (
+        <div className="container">
+          <header>
+            <div className="logo">
+              <div className="mark">VA</div>
+              <div>
+                <div style={{fontSize:18,fontWeight:700}}>Virtual Art Gallery</div>
+                <div className="meta">Explore, discover & buy original pieces</div>
+              </div>
+            </div>
+            <div className="row">
+              <div className="meta">{user? `${user.name} • ${user.role}`: 'Not signed in'}</div>
+              <button className="ghost" onClick={()=>setShowCart(true)}>Cart <span style={{marginLeft:8}}>({cart.reduce((s,i)=>s+i.qty,0)})</span></button>
+              {user? <button className="ghost" onClick={logout}>Logout</button> : null}
+            </div>
+          </header>
+
+          <main>
+            {!user ? (
+              <section className="card login-wrap">
+                <h2 style={{marginTop:0}}>Welcome — sign in to continue</h2>
+                <p className="meta">Demo users available: admin/admin123, artist1/artist123, customer/cust123, curator/cur123</p>
+                <div style={{marginTop:12}}>
+                  <input id="username" placeholder="Username (demo)" />
+                  <div style={{height:8}}></div>
+                  <input id="password" type="password" placeholder="Password (demo)" />
+                  <div style={{height:12}}></div>
+
+                  {/* CAPTCHA: show canvas + input */}
+                  <div style={{display:'flex',gap:8,alignItems:'center',marginBottom:8}}>
+                    <LetterCaptcha length={5} onCodeChange={(c)=>{ setCaptchaCode(c); }} />
+                    <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                      <input className="captcha-input" value={captchaInput} onChange={e=>setCaptchaInput(e.target.value)} placeholder="Type letters" />
+                      <div className="mini">Case-insensitive</div>
+                    </div>
+                  </div>
+
+                  <div style={{display:'flex',gap:8}}>
+                    <button className="primary" onClick={()=>{
+                      const un = document.getElementById('username').value.trim();
+                      const pw = document.getElementById('password').value;
+                      if(!un || !pw){ alert('Enter username & password'); return }
+                      if(isNumericOnly(un)){ alert('Username cannot be only numbers'); return }
+                      loginWith(un, pw);
+                    }}>Sign in</button>
+                    <button className="ghost" onClick={()=>{
+                      // guest path also requires captcha to avoid bots
+                      if(!captchaInput || captchaInput.trim().toLowerCase() !== String(captchaCode).trim().toLowerCase()){
+                        alert('Invalid CAPTCHA — please type the letters shown');
+                        return;
+                      }
+                      setUser({username:'guest', role:'customer', name:'Guest'});
+                    }}>Continue as Guest</button>
+                  </div>
+                  <div style={{marginTop:12, display:'flex', gap:8}}>
+                    <button className="small ghost" onClick={()=>quickLogin('admin')}>Quick: Admin</button>
+                    <button className="small ghost" onClick={()=>quickLogin('artist')}>Quick: Artist</button>
+                    <button className="small ghost" onClick={()=>quickLogin('customer')}>Quick: Customer</button>
+                    <button className="small ghost" onClick={()=>quickLogin('curator')}>Quick: Curator</button>
+                  </div>
+                </div>
+              </section>
+            ) : (
+              <section>
+                <div className="card" style={{marginTop:14}}>
+                  <div className="controls">
+                    <div style={{flex:1}}>
+                      <input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search by title or artist" />
+                    </div>
+                    <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                      <select value={filterByApproval} onChange={e=>setFilterByApproval(e.target.value)} style={{display: user && (user.role==='admin' || user.role==='curator') ? 'inline-block' : 'none'}}>
+                        <option value="all">All</option>
+                        <option value="approved">Approved</option>
+                        <option value="unapproved">Unapproved</option>
+                      </select>
+                      <select value={sort} onChange={e=>setSort(e.target.value)}>
+                        <option value="new">Sort: New</option>
+                        <option value="price-asc">Price: Low → High</option>
+                        <option value="price-desc">Price: High → Low</option>
+                      </select>
+                      <button className="ghost" onClick={()=>{setQuery(''); setSort('new'); setFilterByApproval('all')}}>Reset</button>
+                      { (user.role === 'admin' || user.role === 'artist') && <button className="primary" onClick={()=>{ setEditing(null); setShowManageModal(true); }}>Add artwork</button> }
+                      { user.role === 'admin' && <button className="ghost" onClick={()=>{ setArtworks(DEFAULT_ARTWORKS); alert('Reset to default artworks'); }}>Reset Artworks</button> }
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{height:18}}></div>
+
+                <div className="gallery">
+                  {filtered().map(it=> (
+                    <div key={it.id} className="item">
+                      <div className="thumb" style={{backgroundImage:`url(${it.img})`}}></div>
+                      <div className="info">
+                        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                          <div>
+                            <div className="title">{it.title}</div>
+                            <div className="artist">by {it.artist} • {it.year}</div>
+                          </div>
+                          <div style={{textAlign:'right'}}>
+                            <div className="mini">₹{it.price}</div>
+                            <div style={{marginTop:6}}>
+                              {it.featured ? <span className="badge">Featured</span> : null}
+                              {!it.approved ? <div className="mini" style={{color:'#ffcc00'}}>Awaiting approval</div> : null}
+                            </div>
+                          </div>
+                        </div>
+                        <div style={{marginTop:12}}>{it.desc}</div>
+                        <div className="actions">
+                          <button className="ghost" onClick={()=>setSelected(it)}>View</button>
+                          { it.approved ? <button className="primary" onClick={()=>addToCart(it)}>Add to cart</button> : <button className="ghost" onClick={()=>alert('This artwork is not approved for sale yet')}>Not for sale</button> }
+                          { user.role === 'admin' && <button className="ghost" onClick={()=>{ setEditing(it); setShowManageModal(true); }}>Edit</button> }
+                          { user.role === 'artist' && it.artistUser === user.username && <button className="ghost" onClick={()=>{ setEditing(it); setShowManageModal(true); }}>Edit</button> }
+                          { (user.role === 'admin') && <button className="ghost" onClick={()=>deleteArtwork(it.id)}>Delete</button> }
+                          { user.role === 'curator' && <button className="ghost" onClick={()=>toggleApproval(it.id)}>{it.approved ? 'Unapprove' : 'Approve'}</button> }
+                          { (user.role === 'admin' || user.role === 'curator') && <button className="ghost" onClick={()=>toggleFeatured(it.id)}>{it.featured ? 'Unfeature' : 'Feature'}</button> }
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+          </main>
+
+          <footer>Built as a single-file React demo • Role-based demo logins</footer>
+
+          <div className={`modal-back ${selected ? 'show':''}`} style={{display:selected?'flex':'none'}} onClick={()=>setSelected(null)}>
+            <div className="modal card" onClick={e=>e.stopPropagation()}>
+              {selected && (
+                <div style={{display:'flex',gap:12,flexWrap:'wrap'}}>
+                  <div style={{flex:'1 1 300px'}}><img src={selected.img} style={{width:'100%',borderRadius:8}}/></div>
+                  <div style={{flex:'1 1 260px'}}>
+                    <h3 style={{marginTop:0}}>{selected.title}</h3>
+                    <div className="meta">by {selected.artist} • {selected.year}</div>
+                    <p style={{marginTop:12}}>{selected.desc}</p>
+                    <div style={{marginTop:12,fontWeight:700}}>Price: ₹{selected.price}</div>
+                    <div style={{marginTop:12}}>
+                      {selected.approved ? <button className="primary" onClick={()=>{ addToCart(selected); setSelected(null); }}>Buy</button> : <button className="ghost" onClick={()=>alert('Not approved for sale')}>Not for sale</button>}
+                      <button className="ghost" onClick={()=>setSelected(null)} style={{marginLeft:8}}>Close</button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="modal-back" style={{display: showCart? 'flex':'none'}} onClick={()=>setShowCart(false)}>
+            <div className="modal card" onClick={e=>e.stopPropagation()}>
+              <h3>Cart & Checkout</h3>
+              <div className="checkout">
+                <div>
+                  <div className="cart-list">
+                    {cart.length===0 ? (<div className="meta">Your cart is empty.</div>) : cart.map(it=> (
+                      <div key={it.id} style={{padding:'8px 0',display:'flex',justifyContent:'space-between'}}>
+                        <div><strong>{it.title}</strong><div className="meta">₹{it.price} × {it.qty}</div></div>
+                        <div style={{textAlign:'right'}}>
+                          <button className="ghost" onClick={()=>dec(it.id)}>-</button>
+                          <button className="ghost" onClick={()=>inc(it.id)}>+</button>
+                          <button className="ghost" onClick={()=>removeItem(it.id)}>Remove</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <aside className="card" style={{padding:12}}>
+                  <div><strong>Summary</strong></div>
+                  <div style={{marginTop:12}}>Items: <span>{cart.reduce((s,i)=>s+i.qty,0)}</span></div>
+                  <div>Subtotal: ₹<span>{cart.reduce((s,i)=>s+i.qty*i.price,0)}</span></div>
+                  <div style={{marginTop:12}}>
+                    <input id="shipname" placeholder="Shipping name" style={{width:'100%',padding:8,borderRadius:8,background:'rgba(255,255,255,0.03)',border:'none'}} />
+                  </div>
+                  <div style={{marginTop:12}}>
+                    <button className="primary" onClick={()=>{ const name = document.getElementById('shipname').value.trim(); if(!name){alert('Enter shipping name'); return} placeOrder(); }}>Place order</button>
+                    <button className="ghost" onClick={()=>setShowCart(false)} style={{marginLeft:8}}>Close</button>
+                  </div>
+                </aside>
+              </div>
+            </div>
+          </div>
+
+          <div className="modal-back" style={{display: showManageModal? 'flex':'none'}} onClick={()=>setShowManageModal(false)}>
+            <div className="modal card" onClick={e=>e.stopPropagation()}>
+              <h3>{editing ? 'Edit artwork' : 'Add artwork'}</h3>
+              <ArtworkForm
+                current={editing}
+                user={user}
+                onCancel={()=>{ setShowManageModal(false); setEditing(null); }}
+                onSave={(obj)=>{ saveArtwork(obj); setShowManageModal(false); setEditing(null); }}
+              />
+            </div>
+          </div>
+
+        </div>
+      )
+    }
+
+    function ArtworkForm({current, onSave, onCancel, user}){
+      const [title, setTitle] = useState(current?.title || '');
+      const [artist, setArtist] = useState(current?.artist || (user?.role==='artist' ? user.name : ''));
+      const [artistUser, setArtistUser] = useState(current?.artistUser || (user?.role==='artist' ? user.username : ''));
+      const [price, setPrice] = useState(current?.price || 0);
+      const [year, setYear] = useState(current?.year || new Date().getFullYear());
+      const [desc, setDesc] = useState(current?.desc || '');
+      const [img, setImg] = useState(current?.img || 'https://picsum.photos/seed/' + Math.floor(Math.random()*1000) + '/800/600');
+      const [approved, setApproved] = useState(current?.approved ?? (user?.role==='admin' ? true : false));
+      const [featured, setFeatured] = useState(current?.featured || false);
+
+      function submit(){
+        if(!title || !artist){ alert('Title and artist required'); return }
+        // ensure artistUser isn't numeric-only
+        if(isNumericOnly(artistUser)){
+          alert('Artist username cannot be only numbers');
+          return;
+        }
+        const obj = {
+          id: current?.id,
+          title, artist, artistUser: artistUser || 'unknown',
+          price: Number(price) || 0, year: Number(year) || new Date().getFullYear(),
+          desc, img, approved: Boolean(approved), featured: Boolean(featured)
+        };
+        onSave(obj);
+      }
+
+      return (
+        <div>
+          <div style={{display:'grid',gap:8}}>
+            <input value={title} onChange={e=>setTitle(e.target.value)} placeholder="Title" />
+            <div style={{display:'flex',gap:8}}>
+              <input value={artist} onChange={e=>setArtist(e.target.value)} placeholder="Artist display name" />
+              <input value={artistUser} onChange={e=>setArtistUser(e.target.value)} placeholder="Artist username (optional)" />
+            </div>
+            <div style={{display:'flex',gap:8}}>
+              <input value={price} onChange={e=>setPrice(e.target.value)} placeholder="Price" />
+              <input value={year} onChange={e=>setYear(e.target.value)} placeholder="Year" />
+            </div>
+            <textarea rows={3} value={desc} onChange={e=>setDesc(e.target.value)} placeholder="Short description" />
+            <input value={img} onChange={e=>setImg(e.target.value)} placeholder="Image URL" />
+            <div style={{display:'flex',gap:8,alignItems:'center'}}>
+              <label className="mini"><input type="checkbox" checked={approved} onChange={e=>setApproved(e.target.checked)} /> Approved</label>
+              <label className="mini"><input type="checkbox" checked={featured} onChange={e=>setFeatured(e.target.checked)} /> Featured</label>
+            </div>
+            <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:8}}>
+              <button className="ghost" onClick={onCancel}>Cancel</button>
+              <button className="primary" onClick={submit}>Save</button>
+            </div>
+          </div>
+        </div>
+      )
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
+  </script>
+</body>
+</html>
